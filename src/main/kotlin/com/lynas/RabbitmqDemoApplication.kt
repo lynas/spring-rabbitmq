@@ -29,29 +29,56 @@ const val QUEUE_NAME = "QUEUE_NAME1"
 const val TOPIC_EXCHANGE_NAME = "TOPIC_EXCHANGE_NAME1"
 const val ROUTE_KEY_NAME = "ROUTE_KEY_NAME1"
 
+const val DLQ_NAME = "DLQ_QUEUE_NAME1"
+const val DLQ_EXCHANGE_NAME = "DLQ_EXCHANGE_NAME1"
+const val DLQ_ROUTE_KEY_NAME = "DLQ_ROUTE_KEY_NAME1"
+
 @Configuration
 class RabbitMQConfig {
 
     @Bean
-    fun binding(): Binding = BindingBuilder
-        .bind(Queue(QUEUE_NAME))
-        .to(TopicExchange(TOPIC_EXCHANGE_NAME))
-        .with(ROUTE_KEY_NAME)
-
-    @Bean
-    fun template(connectionFactory: ConnectionFactory): RabbitTemplate {
-        val template = RabbitTemplate(connectionFactory)
-        template.messageConverter = Jackson2JsonMessageConverter()
-        return template
+    fun mainQueue(): Queue {
+        val args = mapOf(
+            "x-dead-letter-exchange" to DLQ_EXCHANGE_NAME,
+            "x-dead-letter-routing-key" to DLQ_ROUTE_KEY_NAME
+        )
+        return Queue(QUEUE_NAME, true, false, false, args)
     }
 
     @Bean
-    fun rabbitListenerContainerFactory(connectionFactory: ConnectionFactory): SimpleRabbitListenerContainerFactory {
-        val factory = SimpleRabbitListenerContainerFactory()
-        factory.setConnectionFactory(connectionFactory)
-        factory.setMessageConverter(Jackson2JsonMessageConverter())
-        return factory
-    }
+    fun mainExchange(): TopicExchange = TopicExchange(TOPIC_EXCHANGE_NAME)
+
+    @Bean
+    fun mainBinding(mainQueue: Queue, mainExchange: TopicExchange): Binding =
+        BindingBuilder.bind(mainQueue)
+            .to(mainExchange)
+            .with(ROUTE_KEY_NAME)
+
+    @Bean
+    fun deadLetterExchange(): TopicExchange = TopicExchange(DLQ_EXCHANGE_NAME)
+    @Bean
+    fun deadLetterQueue(): Queue = Queue(DLQ_NAME)
+
+    @Bean
+    fun deadLetterBinding(deadLetterQueue: Queue, deadLetterExchange: TopicExchange): Binding =
+        BindingBuilder.bind(deadLetterQueue)
+            .to(deadLetterExchange)
+            .with(DLQ_ROUTE_KEY_NAME)
+
+    @Bean
+    fun template(connectionFactory: ConnectionFactory): RabbitTemplate = RabbitTemplate(connectionFactory)
+        .apply {
+            messageConverter = Jackson2JsonMessageConverter()
+        }
+
+    @Bean
+    fun rabbitListenerContainerFactory(connectionFactory: ConnectionFactory): SimpleRabbitListenerContainerFactory =
+        SimpleRabbitListenerContainerFactory()
+            .apply {
+                setConnectionFactory(connectionFactory)
+                setMessageConverter(Jackson2JsonMessageConverter())
+            }
+
 }
 
 @Service
@@ -63,7 +90,6 @@ class Producer(
         template.convertAndSend(TOPIC_EXCHANGE_NAME, ROUTE_KEY_NAME, message)
     }
 }
-
 
 
 @RestController
@@ -88,6 +114,11 @@ class Consumer {
     @RabbitListener(queues = [QUEUE_NAME], containerFactory = "rabbitListenerContainerFactory")
     fun consumer(message: UserInfo) {
         println("Consumer received: $message")
+    }
+
+    @RabbitListener(queues = [DLQ_NAME], containerFactory = "rabbitListenerContainerFactory")
+    fun dlqConsumer(message: UserInfo) {
+        println("DLQ received: $message")
     }
 
 }
