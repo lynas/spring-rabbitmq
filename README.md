@@ -4,8 +4,8 @@
 - Run the project
 - Go to rabbit mq management dashboard
 - http://localhost:15672
-  - if you see queue name based error go to queue tab in dashboard and create a new topic with type classic
-  - Similarly, if you see any exchange name based error go to exchange tab in dashboard and add exchange with type topic
+  - if you see queue name based error go to queue tab in dashboard and create a new queue with type classic
+  - Similarly, if you see any exchange name based error go to exchange tab in dashboard and new exchange with type topic
 - Make post call to publish a message
 
 
